@@ -228,7 +228,7 @@ def write_df_types_to_csv(df, proba, seed):
 
 
 
-def main(graph_name = "complete", n = 500, distributions = None, contact_matrices = None, beta = 0.5, num_seeds = 100, sampling = 1, gamma = 1, fasta=False, nexus=False, heuristic=False, heuristic_informed=False):
+def main(graph_name = "complete", n = 500, distributions = None, contact_matrices = None, beta = 0.5, num_seeds = 100, sampling = 1, gamma = 1, minimum = 1, fasta=False, nexus=False, heuristic=False, heuristic_informed=False):
     # to do:
     # write_to_fasta needs to write a .nex file instead of .fasta so we don't have to use beastgen with fasta_to_nexus.template
     # rename write_to_fasta
@@ -261,7 +261,7 @@ def main(graph_name = "complete", n = 500, distributions = None, contact_matrice
             _, tree, _, df, _ = run_one_epi(graph_name, beta, n, seed, distribution, transition_matrix, gamma = gamma)
             df_sample = df[df["date"] == df["date"].mode().max()]
             state_set = set(df_sample["state"])
-            if len(df_sample) > 1 and len(state_set) > 1:
+            if len(df_sample) > minimum and len(state_set) > 1:
                 seeds += seed,
                 seed_and_matrix_i += [[seed, matrix_i]]
                 df_sample = df[df["date"] == df["date"].mode().max()]
@@ -293,6 +293,6 @@ def main(graph_name = "complete", n = 500, distributions = None, contact_matrice
 
 
 if __name__ == "__main__":
-    contact_matrices = [np.array([[x, x], [x, x]]) for x in range(17, 20, 2)]
+    contact_matrices = [np.array([[x, x], [x, x]]) for x in [2.5 +  k/2 for k in range(0, 40, 5)]]
     distributions = len(contact_matrices)*[[250, 250]]
-    main(n = 500, distributions = distributions, contact_matrices = contact_matrices, num_seeds=4, nexus = True)
+    main(n = 500, distributions = distributions, contact_matrices = contact_matrices, beta=0.2, num_seeds=25, minimum = 10, nexus = True)
