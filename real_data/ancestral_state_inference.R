@@ -1,4 +1,4 @@
-# setwd("C:/Users/sjoerd/Downloads/experiment-state_dependent/experiment_state_dependent")
+setwd(getSrcDirectory(function(){})[1])
 
 library(diversitree)
 library(ape)
@@ -11,9 +11,7 @@ get_type_synthetic_data <- function(name) {
 
 get_type_real_data <- function(age, age_groups) {
   type <- nrow(age_groups)
-  print(age)
   for (age_i in 1:nrow(age_groups)) {
-    print(age >= age_groups[age_i, "low"] & age <= age_groups[age_i, "up"])
     if (age >= age_groups[age_i, "low"] & age <= age_groups[age_i, "up"]) {
       type <- age_i
       break
@@ -49,28 +47,31 @@ run_trait_evolution_mcmc <- function(chain_length, country, week, method, age_gr
   # child_type <- integer(n_tips)
   # marginals <- numeric(n_tips)
 
-  types <- c()
-  for (name in tips) {
-    print(name)
-    age = meta_df[meta_df$strain == name, "age"]
-    types <- append(types, get_type_real_data(age, age_groups))
+  if (method != "bd") {
+    types <- c()
+    for (name in tips) {
+      age = meta_df[meta_df$strain == name, "age"]
+      types <- append(types, get_type_real_data(age, age_groups))
+    }
+    states <- setNames(types, tips)
+    k = max(types)
+    set.seed(seed)
   }
-  print(age_groups)
-  states <- setNames(types, tips)
-  k = max(types) + 1
-  set.seed(seed)
-  
+
   if (method == "mkn") {
-    lik <- make.mkn(phy, states + 1, k)
+    lik <- make.mkn(phy, states, k)
     pars <- .2*rep(1, k*(k-1))
   } else if (method == "MuSSE") {
-    lik <- make.musse(phy, states + 1, k)
+    lik <- make.musse(phy, states, k)
     mu_names <- argnames(lik)[(k+1):(k+k)]
     for (mu_name in mu_names) { # restrict all extinction rates to be the same
       lik <- constrain(lik, formula(paste(mu_name, "~ mu")), extra="mu") 
     }
     pars <- .2*rep(1, k^2 + 1)
     # pars <- .2*rep(1, k^2 + k)
+  } else if (method == "bd") {
+    lik <- make.bd(phy)
+    pars = .2*rep(1, 2)
   }
 
   prior <- make.prior.exponential(prior_mean)
@@ -80,20 +81,25 @@ run_trait_evolution_mcmc <- function(chain_length, country, week, method, age_gr
   
   if (method == "mkn") {  
     header_names <- filter_column_names(names(samples), c("l", "q"))
-    } 
+  } 
   else if (method == "MuSSE") {
     header_names <- filter_column_names(names(samples), c("m", "l", "q"))
+  } 
+  else if (method == "bd") {
+    header_names <- filter_column_names(names(samples), c("m", "l"))
   }
   params_inf <- colMeans(samples[header_names])
   return(params_inf)
 }
 
+mcmc_length = 1
+
 age_groups = data.frame(low = seq(0, 90, 10), up = seq(9, 99, 10))
-methods = c("mkn", "MuSSE")
+methods = c("mkn", "MuSSE", "bd")
 countries = c("slovenia", "belgium", "luxembourg")
 weeks = c("1", "2", "1_2")
 
-method = methods[2]
+method = methods[3]
 country = countries[1]
 week = weeks[2]
 
@@ -101,12 +107,16 @@ week = weeks[2]
 start <- Sys.time()
 
 params_inf <- run_trait_evolution_mcmc(mcmc_length, country, week, method, age_groups, seed = sum(utf8ToInt(country))*sum(utf8ToInt(week)))
-df <- rbind(df,as.list(params_inf))
+print(params_inf)
+#df <- rbind(df,as.list(params_inf))
+df <- data.frame(as.list(params_inf))
 
 print(Sys.time() - start)
 
 if (method == "mkn") {
-  write.csv(df, "experiment_real/output_real_tree_mkn.csv", row.names=FALSE)
+  write.csv(df, "tree_data/output_beast_tree_mkn.csv", row.names=FALSE)
 } else if (method == "MuSSE") {
-  write.csv(df, "experiment_real/output_real_tree_MuSSE.csv", row.names=FALSE)
+  write.csv(df, "tree_data/output_beast_tree_MuSSE.csv", row.names=FALSE)
+} else if (method == "bd") {
+  write.csv(df, "tree_data/output_beast_tree_bd.csv", row.names=FALSE)
 }

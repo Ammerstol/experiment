@@ -16,6 +16,7 @@ import functools
 import itertools
 import pickle
 import random
+import os
 
 from dotdict import dotdict
 
@@ -228,7 +229,7 @@ def write_df_types_to_csv(df, proba, seed):
 
 
 
-def main(graph_name = "complete", n = 500, distributions = None, contact_matrices = None, beta = 0.5, num_seeds = 100, sampling = 1, gamma = 1, minimum = 1, fasta=False, nexus=False, heuristic=False, heuristic_informed=False):
+def main(graph_name = "complete", n = 500, distributions = None, contact_matrices = None, beta = 0.5, num_seeds = 100, sampling = 1, gamma = 1, minimum_sample = 2, fasta=False, nexus=False, heuristic=False, heuristic_informed=False):
     # to do:
     # write_to_fasta needs to write a .nex file instead of .fasta so we don't have to use beastgen with fasta_to_nexus.template
     # rename write_to_fasta
@@ -258,14 +259,19 @@ def main(graph_name = "complete", n = 500, distributions = None, contact_matrice
         
         while len(seeds) < num_seeds:
             seed += 1
+            print(f"seed: {seed}")
             _, tree, _, df, _ = run_one_epi(graph_name, beta, n, seed, distribution, transition_matrix, gamma = gamma)
-            df_sample = df[df["date"] == df["date"].mode().max()]
-            state_set = set(df_sample["state"])
-            if len(df_sample) > minimum and len(state_set) > 1:
-                seeds += seed,
-                seed_and_matrix_i += [[seed, matrix_i]]
-                df_sample = df[df["date"] == df["date"].mode().max()]
-                run_and_write_nexus(df_sample, tree, seed, matrix_i, fasta=fasta, nexus=nexus)
+            dup_counts = df.pivot_table(index=['date'], aggfunc='size')
+            duplicate_dates = dup_counts.loc[dup_counts >= minimum_sample].index
+            if len(duplicate_dates) > 0:
+                sampling_date = min(duplicate_dates)
+                df_sample = df[df["date"] == sampling_date]
+                state_set = set(df_sample["state"])
+                if len(state_set) > 1:
+                    seed_and_matrix_i += [seed, matrix_i]
+                    seeds += seed,
+                    df_sample = df[df["date"] == df["date"].mode().max()]
+                    run_and_write_nexus(df_sample, tree, seed, matrix_i, fasta=fasta, nexus=nexus)
 
 
     if distributions == None:
@@ -274,8 +280,6 @@ def main(graph_name = "complete", n = 500, distributions = None, contact_matrice
         with open("distribution.csv", "w") as file:
             file.write(f"None")
     else:
-        np.savetxt("contact_matrix.csv", contact_matrix, delimiter=",")
-        np.savetxt("distribution.csv", np.array(distribution), delimiter=",")
         with open("matrices.txt", "w") as file:
             for matrix_i, contact_matrix in enumerate(contact_matrices):
                 file.write(str(matrix_i) + " " + str(contact_matrix.tolist()) + "\n")
@@ -293,6 +297,9 @@ def main(graph_name = "complete", n = 500, distributions = None, contact_matrice
 
 
 if __name__ == "__main__":
-    contact_matrices = [np.array([[x, x], [x, x]]) for x in [2.5 +  k/2 for k in range(0, 40, 5)]]
-    distributions = len(contact_matrices)*[[250, 250]]
-    main(n = 500, distributions = distributions, contact_matrices = contact_matrices, beta=0.2, num_seeds=25, minimum = 10, nexus = True)
+    beta = 0.2
+    contact_matrices = [x*np.ones((2, 2)) for x in np.linspace(1/beta + 0.05, 2.5/beta, 10)]
+    n = 3000
+    distributions = len(contact_matrices)*[[int(n/2), n - int(n/2)]]
+    os.chdir(os.path.dirname(os.path.abspath(__file__)))
+    main(n = n, distributions = distributions, contact_matrices = contact_matrices, beta=beta, num_seeds=5, minimum_sample = 200, nexus = True)
