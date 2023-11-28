@@ -3,6 +3,7 @@ import numpy as np
 from scipy import linalg
 import csv
 import os
+import matplotlib.pyplot as plt
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
@@ -20,18 +21,71 @@ matrices = []
 for delimited in matrices_delimited:
     matrices += [np.array(eval(''.join(delimited)))]
 
-val_dict = {matrix_i: [] for matrix_i in matrix_indices}
-
 params = pd.read_csv("parameters.txt")
 beta = params["beta"].item()
 
-df_real = pd.read_csv("experiment_real/output_real_tree_bd.csv")
+df_MuSSE = pd.read_csv("experiment_real/output_real_tree_MuSSE.csv")
 
-for row_i, row in df_real.iterrows():
-    val_dict[mats_exps[row_i][0]] += row["lambda"],
+cols = df_MuSSE.columns
+transition_rates = sorted([name for name in cols if name[0] == "q"])
+speciation_rates = sorted([name for name in cols if name[0] == "l"])
+all_rates = speciation_rates + transition_rates
 
-for key in val_dict:
-    print(f"{key}: {sum(val_dict[key])/len(val_dict[key])}")
+val_dict = {exp: {matrix_i: [] for matrix_i in matrix_indices} for exp in all_rates}
+
+for row_i, row in df_MuSSE.iterrows():
+    for exp in all_rates:
+        val_dict[exp][mats_exps[row_i][0]] += row[exp],
+
+if True:
+    df_bd = pd.read_csv("experiment_real/output_real_tree_bd.csv")
+
+    cols = df_bd.columns
+    speciation_rates = sorted([name for name in cols if name[0] == "l"])
+
+    val_dict_bd = {matrix_i: [] for matrix_i in matrix_indices}
+
+    for row_i, row in df_bd.iterrows():
+            val_dict_bd[mats_exps[row_i][0]] += row["lambda"],
+
+print(val_dict_bd)
+
+k = int(np.ceil(np.sqrt(len(all_rates))))
+fig, axes = plt.subplots(k, k)
+
+for ax_i, ax in enumerate(axes.flat):
+    rate_list = []
+    rate_list_bd = []
+    for matrix_i in matrix_indices:
+        rate_list += np.array(val_dict[all_rates[ax_i]][matrix_i]).mean(),
+        if all_rates[ax_i][0] == "l":
+            rate_list_bd += np.array(val_dict_bd[matrix_i]).mean(),
+    ax.plot(rate_list, label = "MuSSE")
+    if all_rates[ax_i][0] == "l":
+        ax.plot(rate_list_bd, label = "BD")
+        handles, labels = ax.get_legend_handles_labels()
+    ax.set_title(all_rates[ax_i])
+fig.legend(handles, labels, loc=(0, 0.84))
+fig.suptitle("Comparison between MuSSE and Birth-Death (BD) parameter estimation,\nnote there is only one lambda in the BD process")
+fig.tight_layout()
+plt.show()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 # for mat_exp in 
 

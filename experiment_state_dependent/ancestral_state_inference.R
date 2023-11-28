@@ -39,7 +39,7 @@ filter_column_names <- function(all_names, params) { # to filter which parameter
   return(filtered_names)
 }
 
-run_trait_evolution_mcmc <- function(chain_length, matrix_i, exp, method, age_groups, prior_mean = 2, seed = 1) {
+run_trait_evolution_mcmc <- function(chain_length, matrix_i, exp, method, age_groups, prior_mean = 2, seed = 1, take_mean = TRUE) {
   phy <- read.nexus(paste("experiment_real/", "real_tree_", matrix_i, "_exp_", exp, ".nex", sep = ""))
 
   tips <- phy$tip.label
@@ -91,16 +91,22 @@ run_trait_evolution_mcmc <- function(chain_length, matrix_i, exp, method, age_gr
   else if (method == "bd") {
     header_names <- filter_column_names(names(samples), c("m", "l"))
   }
-  params_inf <- colMeans(samples[header_names])
+
+  if (take_mean) {
+    params_inf <- colMeans(samples[header_names])
+  } else {
+     params_inf <- samples[header_names]
+  }
   return(params_inf)
 }
 
-mcmc_length = 100
+mcmc_length = 10000
 
 methods = c("mkn", "MuSSE", "bd")
 method = methods[2]
+take_mean = FALSE
 
-experiments_and_matrix_indices <- read.delim("experiments_and_matrix_indices.txt", header = FALSE, sep = " ")
+experiments_and_matrix_indices <- read.delim("experiments_and_matrix_indices.txt", header = FALSE, sep = " ")[1, ]
 # experiments_and_matrix_indices <- experiments_and_matrix_indices[1,]
 
 params_inf <- run_trait_evolution_mcmc(1, experiments_and_matrix_indices[1,1], experiments_and_matrix_indices[1,2], method, seed = 1)
@@ -110,19 +116,27 @@ colnames(df) = columns
 max_exp <- max(experiments_and_matrix_indices[, 1])
 
 start <- Sys.time()
-for (i in 1:nrow(experiments_and_matrix_indices)) {
-  print(paste(i, " / ", nrow(experiments_and_matrix_indices)))
-  matrix_i = experiments_and_matrix_indices[i, 1]
-  exp = experiments_and_matrix_indices[i, 2]
-  params_inf <- run_trait_evolution_mcmc(mcmc_length, matrix_i, exp, method, seed = max_exp*matrix_i + exp)
+
+
+if (take_mean) {
+  for (i in 1:nrow(experiments_and_matrix_indices)) {
+    print(paste(i, " / ", nrow(experiments_and_matrix_indices)))
+    matrix_i = experiments_and_matrix_indices[i, 1]
+    exp = experiments_and_matrix_indices[i, 2]
+    params_inf <- run_trait_evolution_mcmc(mcmc_length, matrix_i, exp, method, seed = max_exp*matrix_i + exp)
+    df <- rbind(df,as.list(params_inf))
+  }
+} else {
+  matrix_i = experiments_and_matrix_indices[1, 1]
+  exp = experiments_and_matrix_indices[1, 2]
+  params_inf <- run_trait_evolution_mcmc(mcmc_length, matrix_i, exp, method, seed = max_exp*matrix_i + exp, take_mean = take_mean)
   df <- rbind(df,as.list(params_inf))
 }
+
 print(Sys.time() - start)
 
-if (method == "mkn") {
-  write.csv(df, "experiment_real/output_real_tree_mkn.csv", row.names=FALSE)
-} else if (method == "MuSSE") {
-  write.csv(df, "experiment_real/output_real_tree_MuSSE.csv", row.names=FALSE)
-} else if (method == "bd") {
-  write.csv(df, "experiment_real/output_real_tree_bd.csv", row.names=FALSE)
+if (take_mean) {
+  write.csv(df, paste("experiment_real/output_real_tree_", method,".csv", row.names=FALSE))
+} else {
+   write.csv(df, paste("experiment_real/output_real_tree_", method,"_single.csv", sep = ""), row.names=FALSE)
 }
